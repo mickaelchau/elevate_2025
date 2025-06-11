@@ -1,0 +1,54 @@
+/*
+ * Copyright 2025 Google LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+rule rdp_client_writing_non_temp_files_elevate2025 {
+  meta:
+    author = "Google Cloud Security"
+    description = "Detects the RDP client (mstsc.exe) writing files that do not match common RDP temporary file patterns. This could indicate malicious activity via RDP resource redirection."
+    rule_id = "mr_d4e5f6a7-b8c9-0123-4567-890abcdef01" // Placeholder UUID
+    rule_name = "RDP Client Writing Non-Temporary Files"
+    tactic = "TA0010" // Exfiltration
+    technique = "T1021.001" // Remote Services: Remote Desktop Protocol
+    type = "alert"
+    data_source = "microsoft sysmon, EDR"
+    severity = "Medium"
+    priority = "Medium"
+    reference = "https://www.virustotal.com/gui/collection/report--25-10015981"
+
+  events:
+    $e.metadata.event_type = "FILE_CREATION"
+    $e.principal.process.file.full_path = /mstsc\.exe$/ nocase
+    // Exclude common RDP temp file patterns and locations
+    not re.regex($e.target.file.full_path, `\\AppData\\Local\\Temp\\_TS[A-Z0-9]{4}\\.tmp$`) nocase
+    not re.regex($e.target.file.full_path, `\\AppData\\Local\\Microsoft\\Terminal Server Client\\`) nocase
+    // Exclude common office document temp files that might be created by mstsc.exe when interacting with remote apps
+    not re.regex($e.target.file.full_path, `~WRD[0-9]{4}\.tmp$`) nocase // Word
+    not re.regex($e.target.file.full_path, `~WRF[0-9]{4}\.tmp$`) nocase // Word
+    not re.regex($e.target.file.full_path, `ppt[A-F0-9]{4}\.tmp$`) nocase // PowerPoint
+    not re.regex($e.target.file.full_path, `^[A-F0-9]{8}$`) nocase // Excel temp files (often 8 hex chars, no extension)
+
+  outcome:
+    $risk_score = 65
+    $principal_hostname = array_distinct($e.principal.hostname)
+    $principal_user_userid = array_distinct($e.principal.user.userid)
+    $actor_process_command_line = array_distinct($e.principal.process.command_line)
+    $actor_process_full_path = array_distinct($e.principal.process.file.full_path)
+    $target_file_full_path = array_distinct($e.target.file.full_path)
+    $target_file_sha256 = array_distinct($e.target.file.sha256)
+    $event_count = count_distinct($e.metadata.id)
+
+  condition:
+    $e
+}
