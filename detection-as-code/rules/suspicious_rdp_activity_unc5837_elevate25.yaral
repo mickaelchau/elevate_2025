@@ -1,0 +1,55 @@
+/*
+ * Copyright 2025 Google LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+rule suspicious_rdp_activity_unc5837_elevate25 {
+
+  meta:
+    author = "Google Cloud Security"
+    description = "Detects suspicious RDP activity related to UNC5837 campaign, including connections to known malicious RDP servers or execution of .rdp files from suspicious locations."
+    rule_id = "mr_c1b2a3d4-e5f6-7890-1234-567890abcdef" // Placeholder UUID - PLEASE REPLACE WITH A UNIQUE UUID
+    rule_name = "Suspicious RDP Activity UNC5837 Elevate25"
+    severity = "High"
+    priority = "High"
+    type = "alert"
+    data_source = "microsoft windows events, microsoft sysmon"
+    reference = "https://www.virustotal.com/gui/collection/report--25-10015981"
+    tags = "RDP, UNC5837, Phishing, Espionage"
+    mitre_tactic = "TA0001, TA0007, TA0009, TA0011" // Initial Access, Discovery, Collection, Command and Control
+    mitre_technique = "T1566.002, T1021.001, T1119, T1071.001" // Spearphishing Link, Remote Desktop Protocol, Automated Collection, Application Layer Protocol: Web Protocols
+
+  events:
+    // Event 1: RDP connection to known malicious domains
+    (
+      $e1.metadata.event_type = "NETWORK_CONNECTION"
+      and (
+        $e1.target.domain.name = "eu-southeast-1-aws.govtr.cloud" or
+        $e1.target.domain.name = "eu-north-1-aws.ua-gov.cloud"
+      )
+      and $e1.target.port = 3389
+    )
+    // Event 2: Execution of .rdp file from Outlook cache
+    or (
+      $e2.metadata.event_type = "PROCESS_LAUNCH"
+      and re.regex($e2.principal.process.file.full_path, `\.rdp$`) nocase
+      and (
+        re.regex($e2.principal.process.file.full_path, `\\AppData\\Local\\Microsoft\\Windows\\(INetCache|Temporary Internet Files)\\Content\\.Outlook\\[A-Z0-9]{8}\\[^\\]{1,255}\\.rdp$`) nocase or
+        re.regex($e2.principal.process.file.full_path, `\\AppData\\Local\\Packages\\Microsoft\\.Outlook_[a-zA-Z0-9]{1,50}\\.{0,120}\\[^\\]{1,80}\\.rdp$`) nocase or
+        re.regex($e2.principal.process.file.full_path, `\\AppData\\Local\\Microsoft\\Olk\\Attachments\\([^\\]{1,50}\\){0,5}[^\\]{1,80}\\.rdp$`) nocase
+      )
+    )
+
+  condition:
+    $e1 or $e2
+}
